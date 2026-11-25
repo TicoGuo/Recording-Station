@@ -265,7 +265,7 @@ function parsePackagePaths(stdout: string): Array<{ packageName: string; apkPath
 }
 
 async function listThirdPartyPackages(): Promise<Array<{ packageName: string; apkPath: string }>> {
-  if (cachedPackagePaths && Date.now() - cachedPackagePathsAt < 30000) {
+  if (cachedPackagePaths && Date.now() - cachedPackagePathsAt < 300000) {
     return cachedPackagePaths;
   }
   const { stdout } = await runAdb(["shell", "pm", "list", "packages", "-3", "-f"], 30000);
@@ -301,12 +301,6 @@ async function runAdbBuffer(args: string[]): Promise<Buffer> {
       else resolve(stdout as unknown as Buffer);
     });
   });
-}
-
-async function getApkSize(apkPath: string): Promise<number> {
-  const { stdout } = await runAdb(["shell", "stat", "-c", "%s", apkPath], 15000);
-  const n = parseInt(stdout.trim(), 10);
-  return Number.isFinite(n) ? n : 0;
 }
 
 // 读取设备文件前 length 字节（head -c）
@@ -389,11 +383,12 @@ function buildMinimalApk(entries: ApkEntry[], front: Buffer): Buffer | null {
 // 尝试仅读前段 + 尾部重建最小 APK；失败/小文件返回 null（走整包 pull）
 async function buildMinimalApkFromDevice(apkPath: string): Promise<Buffer | null> {
   try {
-    const size = await getApkSize(apkPath);
-    if (size < 8 * 1024 * 1024) return null; // 小 APK 整包 pull 也很快
-    const first = await readApkTail(apkPath, Math.min(size, 262144));
+    // 直接读尾部并解析 EOCD，由中央目录偏移推算文件总大小，省去一次 stat 调用
+    const first = await readApkTail(apkPath, 262144);
     const eocd = parseEocd(first);
     if (!eocd) return null;
+    const size = eocd.cdOffset + eocd.cdSize + 22 + eocd.commentLen;
+    if (size < 8 * 1024 * 1024) return null; // 小 APK 整包 pull 也很快
     const need = eocd.cdSize + 22 + eocd.commentLen;
     let tail = first;
     if (need > first.length) tail = await readApkTail(apkPath, Math.min(size, need + 64));
@@ -509,7 +504,7 @@ export function createAndroidRouter(): Router {
   router.get("/apps", async (_req, res) => {
     try {
       const packages = await listThirdPartyPackages();
-      const apps = await mapConcurrent(packages, 6, async (pkg) => {
+      const apps = await mapConcurrent(packages, 8, async (pkg) => {
         let name = appNameCache.get(pkg.packageName);
         if (name === undefined) {
           name = (await resolveAppName(pkg.apkPath)) || pkg.packageName;
@@ -631,19 +626,19 @@ export function createAndroidRouter(): Router {
     }
   });
 
-  // 切换开发者模式
-  router.post("/control/devmode", async (_req, res) => {
+  // 切换“显示触摸点”（小白点）：点击屏幕时显示触摸反馈
+  router.post("/control/touches", async (_req, res) => {
     try {
-      const { stdout } = await runAdb(["shell", "settings", "get", "global", "development_settings_enabled"], 15000);
+      const { stdout } = await runAdb(["shell", "settings", "get", "system", "show_touches"], 15000);
       const enabled = String(stdout).trim() === "1";
       const next = enabled ? "0" : "1";
-      await runAdb(["shell", "settings", "put", "global", "development_settings_enabled", next], 15000);
+      await runAdb(["shell", "settings", "put", "system", "show_touches", next], 15000);
       const label = next === "1" ? "开启" : "关闭";
-      log("info", "android", `开发者模式已${label}`);
-      res.json({ ok: true, enabled: next === "1", message: `开发者模式已${label}` });
+      log("info", "android", `显示触摸点已${label}`);
+      res.json({ ok: true, enabled: next === "1", message: `显示触摸点已${label}` });
     } catch (err) {
       const error = mapError(err);
-      log("error", "android", "切换开发者模式失败", error);
+      log("error", "android", "切换显示触摸点失败", error);
       sendError(res, 502, codeForError(error), error, { ok: false });
     }
   });

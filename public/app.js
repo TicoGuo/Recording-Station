@@ -775,7 +775,7 @@
     };
     bind("qc-reboot", "/api/android/control/reboot", "\u5DF2\u53D1\u9001\u91CD\u542F\u6307\u4EE4");
     bind("qc-screen", "/api/android/control/screen", "\u5DF2\u53D1\u9001\u7535\u6E90\u952E");
-    bind("qc-devmode", "/api/android/control/devmode", "\u5F00\u53D1\u8005\u6A21\u5F0F\u5DF2\u5207\u6362");
+    bind("qc-touches", "/api/android/control/touches", "\u663E\u793A\u89E6\u6478\u70B9\u5DF2\u5207\u6362");
     bind("qc-wifi", "/api/android/control/wifi", "WiFi \u5DF2\u5207\u6362");
   }
   async function refreshAndroidDevices() {

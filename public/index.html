@@ -5,11 +5,20 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate" />
   <title>Recording Station</title>
-  <link rel="stylesheet" href="style.css?v=48" />
+  <link rel="stylesheet" href="style.css?v=49" />
 </head>
 <body>
   <header class="topbar">
     <div class="topbar-inner">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="3"/><path d="M11 18h2"/></svg>
+        </div>
+        <div class="brand-text">
+          <h1>Recording Station</h1>
+          <p class="subtitle">本地设备 · Web 控制台 · build 49</p>
+        </div>
+      </div>
       <div class="quick-controls hidden" id="quick-controls" title="快捷控制">
         <button type="button" class="qc-btn" id="qc-reboot" title="重启设备" aria-label="重启设备">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
@@ -17,22 +26,13 @@
         <button type="button" class="qc-btn" id="qc-screen" title="锁屏/唤醒" aria-label="锁屏/唤醒">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
         </button>
-        <button type="button" class="qc-btn" id="qc-devmode" title="开发者模式" aria-label="开发者模式">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6l-5 6 5 6"/><path d="M16 6l5 6-5 6"/></svg>
+        <button type="button" class="qc-btn" id="qc-touches" title="显示触摸点" aria-label="显示触摸点">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5" fill="currentColor" stroke="none"/></svg>
         </button>
         <button type="button" class="qc-btn" id="qc-wifi" title="WiFi 开关" aria-label="WiFi 开关">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
         </button>
         <span class="qc-time" id="qc-time">--</span>
-      </div>
-      <div class="brand">
-        <div class="brand-mark" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="3"/><path d="M11 18h2"/></svg>
-        </div>
-        <div class="brand-text">
-          <h1>Recording Station</h1>
-          <p class="subtitle">本地设备 · Web 控制台 · build 48</p>
-        </div>
       </div>
       <div class="topbar-actions">
         <div class="device-pill" id="device-pill" title="设备状态">
@@ -283,6 +283,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=48"></script>
+  <script src="app.js?v=49"></script>
 </body>
 </html>

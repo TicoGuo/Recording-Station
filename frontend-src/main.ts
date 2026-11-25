@@ -807,7 +807,7 @@ function bindQuickControls(): void {
   };
   bind("qc-reboot", "/api/android/control/reboot", "已发送重启指令");
   bind("qc-screen", "/api/android/control/screen", "已发送电源键");
-  bind("qc-devmode", "/api/android/control/devmode", "开发者模式已切换");
+  bind("qc-touches", "/api/android/control/touches", "显示触摸点已切换");
   bind("qc-wifi", "/api/android/control/wifi", "WiFi 已切换");
 }
 
