@@ -1,0 +1,22 @@
+node_modules/
+public/app.js
+config.json
+recording/
+release/
+redist/
+cache/
+.screenshots/
+.trae-html-share-packages/
+recording-station-build-*.jpg
+*.log
+logs/
+runtime/node/
+
+# msys64：仅保留 ucrt64/bin 下打包所需的 ideviceinstaller 及其依赖 DLL
+msys64/*
+!msys64/ucrt64/
+msys64/ucrt64/*
+!msys64/ucrt64/bin/
+msys64/ucrt64/bin/*
+!msys64/ucrt64/bin/ideviceinstaller.exe
+!msys64/ucrt64/bin/*.dll

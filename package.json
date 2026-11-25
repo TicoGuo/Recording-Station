@@ -1,0 +1,24 @@
+{
+  "name": "iwcs",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "iOS Web Control Suite - native Core web recorder",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "esbuild frontend-src/main.ts --bundle --outfile=public/app.js && tsc --noEmit",
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "koffi": "^3.3.8"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.14.9",
+    "esbuild": "^0.21.5",
+    "tsx": "^4.16.2",
+    "typescript": "^5.5.3"
+  }
+}

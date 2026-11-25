@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate" />
+  <title>Recording Station</title>
+  <link rel="stylesheet" href="style.css?v=46" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="3"/><path d="M11 18h2"/></svg>
+        </div>
+        <div class="brand-text">
+          <h1>Recording Station</h1>
+          <p class="subtitle">本地设备 · Web 控制台 · build 47</p>
+        </div>
+      </div>
+      <div class="topbar-actions">
+        <div class="device-pill" id="device-pill" title="设备状态">
+          <span class="dot muted"></span><span class="dp-name">无设备</span>
+        </div>
+        <div class="env-dots" id="env-dots" title="环境状态"></div>
+      </div>
+    </div>
+  </header>
+
+  <nav id="dock" class="dock" aria-label="平台切换">
+    <span class="dock-current" id="dock-current">iOS</span>
+    <div class="dock-tabs" id="dock-tabs">
+      <button type="button" class="dock-tab active" data-platform="ios">iOS</button>
+      <button type="button" class="dock-tab" data-platform="android">Android</button>
+    </div>
+  </nav>
+
+  <main class="content">
+    <section id="panel-ios" class="platform-panel active">
+    <div class="workspace-grid">
+      <!-- 左上：录制控制与冷却计时器 -->
+      <section class="card record-card workspace-record" aria-label="录制控制与冷却计时器">
+        <div class="record-split">
+          <section class="record-left" aria-labelledby="record-control-title">
+            <div class="split-title" id="record-control-title">录制控制</div>
+            <div class="record-pane-body">
+              <button type="button" id="record-toggle" class="record-btn" title="开始录制" aria-label="开始录制">
+                <svg class="rec-icon rec-icon-record" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8" /></svg>
+                <svg class="rec-icon rec-icon-stop" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2" /></svg>
+              </button>
+            </div>
+          </section>
+
+          <section class="record-right" aria-labelledby="cooldown-title">
+            <div class="split-title" id="cooldown-title">冷却计时器</div>
+            <div class="record-pane-body">
+              <div class="timer-setup" id="timer-setup">
+                <div class="timer-selects">
+                  <select id="timer-min-select" aria-label="倒计时分钟"></select>
+                  <span class="timer-select-unit">分</span>
+                  <select id="timer-sec-select" aria-label="倒计时秒数"></select>
+                  <span class="timer-select-unit">秒</span>
+                </div>
+                <button type="button" id="cooldown-start" class="btn primary">开始计时</button>
+              </div>
+
+              <div class="timer-running hidden" id="timer-running">
+                <button type="button" class="timer-dial" id="timer-dial" title="点击取消倒计时">
+                  <svg class="timer-ring" viewBox="0 0 76 76">
+                    <circle class="timer-ring-bg" cx="38" cy="38" r="33" />
+                    <circle class="timer-ring-fg" id="timer-ring-fg" cx="38" cy="38" r="33" />
+                  </svg>
+                  <span class="timer-time" id="timer-time">00:10</span>
+                </button>
+                <div class="timer-hint">点击圆盘取消倒计时</div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <!-- 右侧主区域：输出设置与视频列表 -->
+      <section class="card library-card workspace-playback" aria-labelledby="files-title">
+        <div class="card-head">
+          <div class="card-title-row">
+            <h2 id="files-title">视频文件管理</h2>
+            <p class="card-sub">双击文件名可重命名</p>
+          </div>
+          <button type="button" id="refresh-files-btn" class="btn ghost">刷新</button>
+        </div>
+
+        <div class="output-row">
+          <label class="out-label" for="output-path">输出目录</label>
+          <input type="text" id="output-path" placeholder="留空使用工程下 recording/ios 文件夹" autocomplete="off" spellcheck="false" />
+          <div class="output-actions">
+            <button type="button" id="save-path-btn" class="btn ghost">应用目录</button>
+            <button type="button" id="open-dir-btn" class="btn ghost">打开目录</button>
+          </div>
+        </div>
+
+        <div id="record-files" class="file-list"><div class="empty">暂无录制文件</div></div>
+      </section>
+
+      <!-- 左下：应用卸载与安装 -->
+      <section class="card apps-card workspace-apps" aria-labelledby="apps-title">
+        <div class="card-head">
+          <h2 id="apps-title">应用管理</h2>
+          <button type="button" id="refresh-apps-btn" class="btn ghost">刷新</button>
+        </div>
+
+        <div class="apps-tools">
+          <section class="app-tool" aria-labelledby="uninstall-title">
+            <h3 class="app-sub-head" id="uninstall-title">卸载应用</h3>
+            <div class="manage-row">
+              <select id="app-select"><option value="">选择要卸载的应用…</option></select>
+              <button type="button" id="uninstall-btn" class="btn danger" disabled>卸载</button>
+            </div>
+            <p id="apps-msg" class="msg"></p>
+          </section>
+
+          <section class="app-tool" aria-labelledby="install-title">
+            <h3 class="app-sub-head" id="install-title">安装应用</h3>
+            <div class="manage-row">
+              <input type="text" id="ipa-path" placeholder="输入 IPA 所在目录，或直接输入 .ipa 文件路径" />
+              <button type="button" id="scan-btn" class="btn primary">扫描</button>
+            </div>
+            <div id="ipa-files" class="file-list"><div class="empty">尚未扫描到 IPA 文件</div></div>
+            <p id="ipa-msg" class="msg"></p>
+          </section>
+        </div>
+      </section>
+    </div>
+    </section>
+
+    <section id="panel-android" class="platform-panel">
+      <div class="workspace-grid">
+        <!-- 左上：Android 录制控制与冷却计时器 -->
+        <section class="card record-card workspace-record" aria-label="Android 录制控制与冷却计时器">
+          <div class="record-split">
+            <section class="record-left" aria-labelledby="android-record-title">
+              <div class="split-title" id="android-record-title">录制控制</div>
+              <div class="record-pane-body">
+                <button type="button" id="android-record-toggle" class="record-btn" title="开始录制" aria-label="开始录制">
+                  <svg class="rec-icon rec-icon-record" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8" /></svg>
+                  <svg class="rec-icon rec-icon-stop" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2" /></svg>
+                </button>
+              </div>
+            </section>
+
+            <section class="record-right" aria-labelledby="android-cooldown-title">
+              <div class="split-title" id="android-cooldown-title">冷却计时器</div>
+              <div class="record-pane-body">
+                <div class="timer-setup" id="android-timer-setup">
+                  <div class="timer-selects">
+                    <select id="android-timer-min-select" aria-label="倒计时分钟"></select>
+                    <span class="timer-select-unit">分</span>
+                    <select id="android-timer-sec-select" aria-label="倒计时秒数"></select>
+                    <span class="timer-select-unit">秒</span>
+                  </div>
+                  <button type="button" id="android-cooldown-start" class="btn primary">开始计时</button>
+                </div>
+
+                <div class="timer-running hidden" id="android-timer-running">
+                  <button type="button" class="timer-dial" id="android-timer-dial" title="点击取消倒计时">
+                    <svg class="timer-ring" viewBox="0 0 76 76">
+                      <circle class="timer-ring-bg" cx="38" cy="38" r="33" />
+                      <circle class="timer-ring-fg" id="android-timer-ring-fg" cx="38" cy="38" r="33" />
+                    </svg>
+                    <span class="timer-time" id="android-timer-time">00:10</span>
+                  </button>
+                  <div class="timer-hint">点击圆盘取消倒计时</div>
+                </div>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <!-- 右侧主区域：视频文件管理 -->
+        <section class="card library-card workspace-playback" aria-labelledby="android-files-title">
+          <div class="card-head">
+            <div class="card-title-row">
+              <h2 id="android-files-title">视频文件管理</h2>
+              <p class="card-sub">双击文件名可重命名</p>
+            </div>
+            <button type="button" id="android-refresh-files-btn" class="btn ghost">刷新</button>
+          </div>
+
+          <div class="output-row">
+            <label class="out-label" for="android-output-path">输出目录</label>
+            <input type="text" id="android-output-path" placeholder="留空使用工程下 recording/android 文件夹" autocomplete="off" spellcheck="false" />
+            <div class="output-actions">
+              <button type="button" id="android-save-path-btn" class="btn ghost">应用目录</button>
+              <button type="button" id="android-open-dir-btn" class="btn ghost">打开目录</button>
+            </div>
+          </div>
+
+          <div id="android-record-files" class="file-list"><div class="empty">暂无录制文件</div></div>
+        </section>
+
+        <!-- 左下：应用管理 -->
+        <section class="card apps-card workspace-apps" aria-labelledby="android-apps-title">
+          <div class="card-head">
+            <h2 id="android-apps-title">应用管理</h2>
+            <button type="button" id="android-refresh-apps-btn" class="btn ghost">刷新</button>
+          </div>
+          <div class="apps-tools">
+            <section class="app-tool" aria-labelledby="android-uninstall-title">
+              <h3 class="app-sub-head" id="android-uninstall-title">卸载应用</h3>
+              <div class="manage-row">
+                <select id="android-app-select"><option value="">选择要卸载的应用…</option></select>
+                <button type="button" id="android-uninstall-btn" class="btn danger" disabled>卸载</button>
+              </div>
+              <p id="android-apps-msg" class="msg"></p>
+            </section>
+
+            <section class="app-tool" aria-labelledby="android-install-title">
+              <h3 class="app-sub-head" id="android-install-title">安装应用</h3>
+              <div class="manage-row">
+                <input type="text" id="android-apk-path" placeholder="输入 APK 所在目录，或直接输入 .apk 文件路径" />
+                <button type="button" id="android-scan-btn" class="btn primary">扫描</button>
+              </div>
+              <div id="android-apk-files" class="file-list"><div class="empty">尚未扫描到 APK 文件</div></div>
+              <p id="android-apk-msg" class="msg"></p>
+            </section>
+          </div>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast hidden" role="status"></div>
+
+  <!-- 确认操作弹窗 -->
+  <div id="confirm-modal" class="player-modal hidden">
+    <div class="player-modal-backdrop" id="confirm-backdrop"></div>
+    <div class="player-modal-dialog confirm-dialog" role="dialog" aria-modal="true" aria-label="确认操作">
+      <div class="player-modal-head">
+        <span class="player-modal-title" id="confirm-title">确认操作</span>
+      </div>
+      <p id="confirm-message" class="confirm-message"></p>
+      <div class="confirm-actions">
+        <button type="button" id="confirm-cancel" class="btn ghost">取消</button>
+        <button type="button" id="confirm-ok" class="btn danger">确认</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 冷却倒计时结束全屏提示 -->
+  <div id="cooldown-overlay" class="cooldown-overlay hidden">
+    <div class="cooldown-overlay-box">
+      <div class="cooldown-overlay-title">冷却倒计时已结束</div>
+      <div class="cooldown-overlay-hint">点击任意位置关闭</div>
+    </div>
+  </div>
+
+  <!-- 视频播放弹窗 -->
+  <div id="player-modal" class="player-modal hidden">
+    <div class="player-modal-backdrop" id="player-modal-backdrop"></div>
+    <div class="player-modal-dialog" role="dialog" aria-modal="true" aria-label="视频播放">
+      <div class="player-modal-head">
+        <span class="player-modal-title" id="player-modal-title"></span>
+        <button type="button" id="player-modal-close" class="btn ghost">关闭</button>
+      </div>
+      <video id="player-video" controls playsInline></video>
+    </div>
+  </div>
+
+  <script src="app.js?v=46"></script>
+</body>
+</html>
