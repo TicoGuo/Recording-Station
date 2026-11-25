@@ -69,17 +69,38 @@ async function checkIdeviceinstaller(): Promise<EnvCheck> {
   }
 }
 
+async function checkAndroid(): Promise<EnvCheck> {
+  try {
+    const { stdout } = await execFileAsync(getConfig().adbPath, ["devices", "-l"], {
+      encoding: "utf8",
+      timeout: 15000,
+      windowsHide: true,
+    });
+    const online = String(stdout).split(/\r?\n/).filter((raw) => {
+      const line = raw.trim();
+      if (!line || /^List of devices/i.test(line)) return false;
+      const parts = line.split(/\s+/);
+      return parts.length >= 2 && parts[1] === "device";
+    }).length;
+    if (online > 0) return { ok: true, message: `屏幕采集可用，已连接 ${online} 台设备` };
+    return { ok: false, message: "未检测到 Android 设备（请通过 USB 连接并开启 USB 调试）" };
+  } catch (error) {
+    return { ok: false, message: messageOf(error) };
+  }
+}
+
 export function createHealthRouter(): Router {
   const router = Router();
 
   router.get("/", async (_req, res) => {
-    const [core, ffmpeg, usb, ideviceinstaller] = await Promise.all([
+    const [core, ffmpeg, usb, ideviceinstaller, android] = await Promise.all([
       checkCore(),
       checkFfmpeg(),
       checkUsb(),
       checkIdeviceinstaller(),
+      checkAndroid(),
     ]);
-    res.json({ core, ffmpeg, usb, ideviceinstaller });
+    res.json({ core, ffmpeg, usb, ideviceinstaller, android });
   });
 
   return router;

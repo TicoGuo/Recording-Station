@@ -7,7 +7,7 @@ interface Device {
   state: number; stateLabel: string; message: string;
 }
 interface HealthItem { ok: boolean; message: string; }
-interface Health { core: HealthItem; ffmpeg: HealthItem; usb: HealthItem; ideviceinstaller: HealthItem; }
+interface Health { core: HealthItem; ffmpeg: HealthItem; usb: HealthItem; ideviceinstaller: HealthItem; android: HealthItem; }
 type Mode = "normal" | "record";
 interface ModeStatus { switching: boolean; currentMode: Mode; message: string; }
 interface RecordStatus { recording: boolean; filePath?: string; durationSeconds: number; error?: string; captureFps?: number; encodeFps?: number; }
@@ -141,7 +141,9 @@ function renderTopbar(): void {
   const env = document.getElementById("env-dots");
   if (!env) return;
   env.innerHTML = "";
-  const labels: [keyof Health, string][] = [["core", "采集核心"], ["ffmpeg", "FFmpeg 编码"], ["usb", "屏幕采集"], ["ideviceinstaller", "应用安装"]];
+  const labels: [keyof Health, string][] = currentPlatform === "android"
+    ? [["ffmpeg", "FFmpeg 编码"], ["android", "屏幕采集"]]
+    : [["core", "采集核心"], ["ffmpeg", "FFmpeg 编码"], ["usb", "屏幕采集"], ["ideviceinstaller", "应用安装"]];
   for (const [key, label] of labels) {
     const h = health?.[key];
     const wrap = el("span", "env-item");
