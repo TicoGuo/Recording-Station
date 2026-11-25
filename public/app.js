@@ -34,6 +34,22 @@
   function errMsg(e) {
     return e instanceof Error ? e.message : String(e);
   }
+  async function runWithBusy(btn, task) {
+    if (!btn) {
+      await task();
+      return;
+    }
+    const el2 = btn;
+    const wasDisabled = el2.disabled;
+    el2.disabled = true;
+    btn.classList.add("is-busy");
+    try {
+      await task();
+    } finally {
+      btn.classList.remove("is-busy");
+      el2.disabled = wasDisabled;
+    }
+  }
   function fmtBytes(n) {
     if (!n) return "0 B";
     const units = ["B", "KB", "MB", "GB"];
@@ -476,11 +492,17 @@
       return;
     }
     const a = apps.find((x) => x.bundleId === bundleId);
+    const btn = document.getElementById("uninstall-btn");
     askConfirm(`\u786E\u5B9A\u5378\u8F7D\u300C${a?.name || bundleId}\u300D\uFF1F\u6B64\u64CD\u4F5C\u4E0D\u53EF\u64A4\u9500\u3002`, "\u5378\u8F7D", () => {
-      api("/api/apps/uninstall", { method: "POST", body: JSON.stringify({ bundleId }) }).then(() => {
-        toast(`\u5E94\u7528\u300C${a?.name || bundleId}\u300D\u5DF2\u5378\u8F7D`, "ok");
-        refreshApps();
-      }).catch((e) => toast(errMsg(e), "error"));
+      void runWithBusy(btn, async () => {
+        try {
+          await api("/api/apps/uninstall", { method: "POST", body: JSON.stringify({ bundleId }) });
+          toast(`\u5E94\u7528\u300C${a?.name || bundleId}\u300D\u5DF2\u5378\u8F7D`, "ok");
+          await refreshApps();
+        } catch (e) {
+          toast(errMsg(e), "error");
+        }
+      });
     });
   }
   function renderIpaList() {
@@ -501,7 +523,9 @@
       const actions = el("div", "fi-actions");
       const install = el("button", "btn primary", "\u5378\u8F7D\u5B89\u88C5");
       install.type = "button";
-      install.addEventListener("click", () => installIpa(f));
+      install.addEventListener("click", () => {
+        void installIpa(f, install);
+      });
       actions.append(install);
       item.append(main, actions);
       box.appendChild(item);
@@ -518,46 +542,50 @@
       msg.textContent = "\u626B\u63CF\u4E2D\u2026";
       msg.className = "msg";
     }
-    try {
-      const data = await api(`/api/apps/scan-ipa?dir=${encodeURIComponent(dir)}`);
-      ipaFiles = data.files || [];
-      renderIpaList();
-      if (msg) {
-        msg.textContent = ipaFiles.length ? `\u627E\u5230 ${ipaFiles.length} \u4E2A IPA \u6587\u4EF6` : `\u5728\u300C${dir}\u300D\u4E0B\u6CA1\u6709\u627E\u5230 .ipa \u6587\u4EF6`;
-        msg.className = ipaFiles.length ? "msg ok" : "msg";
+    await runWithBusy(document.getElementById("scan-btn"), async () => {
+      try {
+        const data = await api(`/api/apps/scan-ipa?dir=${encodeURIComponent(dir)}`);
+        ipaFiles = data.files || [];
+        renderIpaList();
+        if (msg) {
+          msg.textContent = ipaFiles.length ? `\u627E\u5230 ${ipaFiles.length} \u4E2A IPA \u6587\u4EF6` : `\u5728\u300C${dir}\u300D\u4E0B\u6CA1\u6709\u627E\u5230 .ipa \u6587\u4EF6`;
+          msg.className = ipaFiles.length ? "msg ok" : "msg";
+        }
+        api("/api/config", { method: "PUT", body: JSON.stringify({ ipaPath: dir }) }).catch(() => {
+        });
+      } catch (e) {
+        ipaFiles = [];
+        renderIpaList();
+        if (msg) {
+          msg.textContent = errMsg(e);
+          msg.className = "msg error";
+        }
       }
-      api("/api/config", { method: "PUT", body: JSON.stringify({ ipaPath: dir }) }).catch(() => {
-      });
-    } catch (e) {
-      ipaFiles = [];
-      renderIpaList();
-      if (msg) {
-        msg.textContent = errMsg(e);
-        msg.className = "msg error";
-      }
-    }
+    });
   }
-  async function installIpa(f) {
+  async function installIpa(f, btn) {
     const msg = document.getElementById("ipa-msg");
     if (msg) {
       msg.textContent = `\u5378\u8F7D\u5B89\u88C5\u4E2D\uFF1A${f.name}\u2026`;
       msg.className = "msg";
     }
-    try {
-      await api("/api/apps/reinstall", { method: "POST", body: JSON.stringify({ ipaPath: f.path }) });
-      toast(`\u5E94\u7528\u300C${f.name}\u300D\u5DF2\u5378\u8F7D\u5E76\u91CD\u65B0\u5B89\u88C5`, "ok");
-      if (msg) {
-        msg.textContent = "";
-        msg.className = "msg";
+    await runWithBusy(btn, async () => {
+      try {
+        await api("/api/apps/reinstall", { method: "POST", body: JSON.stringify({ ipaPath: f.path }) });
+        toast(`\u5E94\u7528\u300C${f.name}\u300D\u5DF2\u5378\u8F7D\u5E76\u91CD\u65B0\u5B89\u88C5`, "ok");
+        if (msg) {
+          msg.textContent = "";
+          msg.className = "msg";
+        }
+        refreshApps();
+      } catch (e) {
+        toast(errMsg(e), "error");
+        if (msg) {
+          msg.textContent = errMsg(e);
+          msg.className = "msg error";
+        }
       }
-      refreshApps();
-    } catch (e) {
-      toast(errMsg(e), "error");
-      if (msg) {
-        msg.textContent = errMsg(e);
-        msg.className = "msg error";
-      }
-    }
+    });
   }
   async function applyMode(target) {
     if (modeSwitching || mode.switching) return false;
@@ -761,19 +789,21 @@
       el2.textContent = "--";
     }
   }
-  async function quickControl(path, fallback) {
-    try {
-      const data = await api(path, { method: "POST" });
-      toast(data.message || fallback, "ok");
-    } catch (e) {
-      toast(errMsg(e), "error");
-    }
+  async function quickControl(btn, path, fallback) {
+    await runWithBusy(btn, async () => {
+      try {
+        const data = await api(path, { method: "POST" });
+        toast(data.message || fallback, "ok");
+      } catch (e) {
+        toast(errMsg(e), "error");
+      }
+    });
   }
   function bindQuickControls() {
     const bind = (id, path, fallback) => {
       const btn = document.getElementById(id);
       if (btn) btn.addEventListener("click", () => {
-        void quickControl(path, fallback);
+        void quickControl(btn, path, fallback);
       });
     };
     bind("qc-reboot", "/api/android/control/reboot", "\u5DF2\u53D1\u9001\u91CD\u542F\u6307\u4EE4");
@@ -1035,11 +1065,17 @@
     }
     const a = androidApps.find((x) => x.packageName === packageName);
     const label = a?.name && a.name !== packageName ? `${a.name}\uFF08${packageName}\uFF09` : packageName;
+    const btn = document.getElementById("android-uninstall-btn");
     askConfirm(`\u786E\u5B9A\u5378\u8F7D\u300C${label}\u300D\uFF1F\u6B64\u64CD\u4F5C\u4E0D\u53EF\u64A4\u9500\u3002`, "\u5378\u8F7D", () => {
-      api("/api/android/uninstall", { method: "POST", body: JSON.stringify({ packageName }) }).then(() => {
-        toast(`\u5E94\u7528\u300C${a?.name || packageName}\u300D\u5DF2\u5378\u8F7D`, "ok");
-        refreshAndroidApps();
-      }).catch((e) => toast(errMsg(e), "error"));
+      void runWithBusy(btn, async () => {
+        try {
+          await api("/api/android/uninstall", { method: "POST", body: JSON.stringify({ packageName }) });
+          toast(`\u5E94\u7528\u300C${a?.name || packageName}\u300D\u5DF2\u5378\u8F7D`, "ok");
+          await refreshAndroidApps();
+        } catch (e) {
+          toast(errMsg(e), "error");
+        }
+      });
     });
   }
   async function forceStopAndroidApp() {
@@ -1050,7 +1086,15 @@
       return;
     }
     const a = androidApps.find((x) => x.packageName === packageName);
-    api("/api/android/force-stop", { method: "POST", body: JSON.stringify({ packageName }) }).then(() => toast(`\u5E94\u7528\u300C${a?.name || packageName}\u300D\u5DF2\u5173\u95ED`, "ok")).catch((e) => toast(errMsg(e), "error"));
+    const btn = document.getElementById("android-force-stop-btn");
+    await runWithBusy(btn, async () => {
+      try {
+        await api("/api/android/force-stop", { method: "POST", body: JSON.stringify({ packageName }) });
+        toast(`\u5E94\u7528\u300C${a?.name || packageName}\u300D\u5DF2\u5173\u95ED`, "ok");
+      } catch (e) {
+        toast(errMsg(e), "error");
+      }
+    });
   }
   async function clearAndroidAppData() {
     const sel = document.getElementById("android-app-select");
@@ -1061,8 +1105,16 @@
     }
     const a = androidApps.find((x) => x.packageName === packageName);
     const label = a?.name && a.name !== packageName ? `${a.name}\uFF08${packageName}\uFF09` : packageName;
+    const btn = document.getElementById("android-clear-data-btn");
     askConfirm(`\u786E\u5B9A\u6E05\u9664\u300C${label}\u300D\u7684\u5168\u90E8\u6570\u636E\u4E0E\u7F13\u5B58\uFF1F\u6B64\u64CD\u4F5C\u4E0D\u53EF\u64A4\u9500\u3002`, "\u6E05\u9664\u6570\u636E", () => {
-      api("/api/android/clear-data", { method: "POST", body: JSON.stringify({ packageName }) }).then(() => toast(`\u5DF2\u6E05\u9664\u300C${a?.name || packageName}\u300D\u7684\u6570\u636E`, "ok")).catch((e) => toast(errMsg(e), "error"));
+      void runWithBusy(btn, async () => {
+        try {
+          await api("/api/android/clear-data", { method: "POST", body: JSON.stringify({ packageName }) });
+          toast(`\u5DF2\u6E05\u9664\u300C${a?.name || packageName}\u300D\u7684\u6570\u636E`, "ok");
+        } catch (e) {
+          toast(errMsg(e), "error");
+        }
+      });
     });
   }
   function renderApkList() {
@@ -1083,7 +1135,9 @@
       const actions = el("div", "fi-actions");
       const install = el("button", "btn primary", "\u5378\u8F7D\u5B89\u88C5");
       install.type = "button";
-      install.addEventListener("click", () => installApk(f));
+      install.addEventListener("click", () => {
+        void installApk(f, install);
+      });
       actions.append(install);
       item.append(main, actions);
       box.appendChild(item);
@@ -1100,46 +1154,50 @@
       msg.textContent = "\u626B\u63CF\u4E2D\u2026";
       msg.className = "msg";
     }
-    try {
-      const data = await api(`/api/android/scan-apk?dir=${encodeURIComponent(dir)}`);
-      apkFiles = data.files || [];
-      renderApkList();
-      if (msg) {
-        msg.textContent = apkFiles.length ? `\u627E\u5230 ${apkFiles.length} \u4E2A APK \u6587\u4EF6` : `\u5728\u300C${dir}\u300D\u4E0B\u6CA1\u6709\u627E\u5230 .apk \u6587\u4EF6`;
-        msg.className = apkFiles.length ? "msg ok" : "msg";
+    await runWithBusy(document.getElementById("android-scan-btn"), async () => {
+      try {
+        const data = await api(`/api/android/scan-apk?dir=${encodeURIComponent(dir)}`);
+        apkFiles = data.files || [];
+        renderApkList();
+        if (msg) {
+          msg.textContent = apkFiles.length ? `\u627E\u5230 ${apkFiles.length} \u4E2A APK \u6587\u4EF6` : `\u5728\u300C${dir}\u300D\u4E0B\u6CA1\u6709\u627E\u5230 .apk \u6587\u4EF6`;
+          msg.className = apkFiles.length ? "msg ok" : "msg";
+        }
+        api("/api/config", { method: "PUT", body: JSON.stringify({ apkPath: dir }) }).catch(() => {
+        });
+      } catch (e) {
+        apkFiles = [];
+        renderApkList();
+        if (msg) {
+          msg.textContent = errMsg(e);
+          msg.className = "msg error";
+        }
       }
-      api("/api/config", { method: "PUT", body: JSON.stringify({ apkPath: dir }) }).catch(() => {
-      });
-    } catch (e) {
-      apkFiles = [];
-      renderApkList();
-      if (msg) {
-        msg.textContent = errMsg(e);
-        msg.className = "msg error";
-      }
-    }
+    });
   }
-  async function installApk(f) {
+  async function installApk(f, btn) {
     const msg = document.getElementById("android-apk-msg");
     if (msg) {
       msg.textContent = `\u5378\u8F7D\u5B89\u88C5\u4E2D\uFF1A${f.name}\u2026`;
       msg.className = "msg";
     }
-    try {
-      await api("/api/android/install", { method: "POST", body: JSON.stringify({ apkPath: f.path }) });
-      toast(`\u5E94\u7528\u300C${f.name}\u300D\u5DF2\u5378\u8F7D\u5E76\u91CD\u65B0\u5B89\u88C5`, "ok");
-      if (msg) {
-        msg.textContent = "";
-        msg.className = "msg";
+    await runWithBusy(btn, async () => {
+      try {
+        await api("/api/android/install", { method: "POST", body: JSON.stringify({ apkPath: f.path }) });
+        toast(`\u5E94\u7528\u300C${f.name}\u300D\u5DF2\u5378\u8F7D\u5E76\u91CD\u65B0\u5B89\u88C5`, "ok");
+        if (msg) {
+          msg.textContent = "";
+          msg.className = "msg";
+        }
+        refreshAndroidApps();
+      } catch (e) {
+        toast(errMsg(e), "error");
+        if (msg) {
+          msg.textContent = errMsg(e);
+          msg.className = "msg error";
+        }
       }
-      refreshAndroidApps();
-    } catch (e) {
-      toast(errMsg(e), "error");
-      if (msg) {
-        msg.textContent = errMsg(e);
-        msg.className = "msg error";
-      }
-    }
+    });
   }
   async function openAndroidDir() {
     try {

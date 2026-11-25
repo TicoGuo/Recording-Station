@@ -54,6 +54,24 @@ function errMsg(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
+// 给按钮加“运行中”过渡动画：执行异步任务期间显示加载态并禁用，完成后恢复原状态
+async function runWithBusy(btn: HTMLElement | null, task: () => Promise<unknown>): Promise<void> {
+  if (!btn) {
+    await task();
+    return;
+  }
+  const el = btn as HTMLButtonElement;
+  const wasDisabled = el.disabled;
+  el.disabled = true;
+  btn.classList.add("is-busy");
+  try {
+    await task();
+  } finally {
+    btn.classList.remove("is-busy");
+    el.disabled = wasDisabled;
+  }
+}
+
 function fmtBytes(n: number): string {
   if (!n) return "0 B";
   const units = ["B", "KB", "MB", "GB"];
@@ -524,10 +542,17 @@ async function uninstallApp(): Promise<void> {
   const bundleId = sel?.value || "";
   if (!bundleId) { toast("请先选择要卸载的应用", "error"); return; }
   const a = apps.find((x) => x.bundleId === bundleId);
+  const btn = document.getElementById("uninstall-btn");
   askConfirm(`确定卸载「${a?.name || bundleId}」？此操作不可撤销。`, "卸载", () => {
-    api("/api/apps/uninstall", { method: "POST", body: JSON.stringify({ bundleId }) })
-      .then(() => { toast(`应用「${a?.name || bundleId}」已卸载`, "ok"); refreshApps(); })
-      .catch((e) => toast(errMsg(e), "error"));
+    void runWithBusy(btn, async () => {
+      try {
+        await api("/api/apps/uninstall", { method: "POST", body: JSON.stringify({ bundleId }) });
+        toast(`应用「${a?.name || bundleId}」已卸载`, "ok");
+        await refreshApps();
+      } catch (e) {
+        toast(errMsg(e), "error");
+      }
+    });
   });
 }
 
@@ -550,7 +575,7 @@ function renderIpaList(): void {
     const actions = el("div", "fi-actions");
     const install = el("button", "btn primary", "卸载安装") as HTMLButtonElement;
     install.type = "button";
-    install.addEventListener("click", () => installIpa(f));
+    install.addEventListener("click", () => { void installIpa(f, install); });
     actions.append(install);
     item.append(main, actions);
     box.appendChild(item);
@@ -563,35 +588,39 @@ async function scanIpa(): Promise<void> {
   const msg = document.getElementById("ipa-msg");
   if (!dir) { toast("请输入 IPA 所在目录", "error"); return; }
   if (msg) { msg.textContent = "扫描中…"; msg.className = "msg"; }
-  try {
-    const data = await api<{ files: IpaFile[] }>(`/api/apps/scan-ipa?dir=${encodeURIComponent(dir)}`);
-    ipaFiles = data.files || [];
-    renderIpaList();
-    if (msg) {
-      msg.textContent = ipaFiles.length ? `找到 ${ipaFiles.length} 个 IPA 文件` : `在「${dir}」下没有找到 .ipa 文件`;
-      msg.className = ipaFiles.length ? "msg ok" : "msg";
+  await runWithBusy(document.getElementById("scan-btn"), async () => {
+    try {
+      const data = await api<{ files: IpaFile[] }>(`/api/apps/scan-ipa?dir=${encodeURIComponent(dir)}`);
+      ipaFiles = data.files || [];
+      renderIpaList();
+      if (msg) {
+        msg.textContent = ipaFiles.length ? `找到 ${ipaFiles.length} 个 IPA 文件` : `在「${dir}」下没有找到 .ipa 文件`;
+        msg.className = ipaFiles.length ? "msg ok" : "msg";
+      }
+      // 记住扫描目录，下次打开自动带出
+      api("/api/config", { method: "PUT", body: JSON.stringify({ ipaPath: dir }) }).catch(() => {});
+    } catch (e) {
+      ipaFiles = [];
+      renderIpaList();
+      if (msg) { msg.textContent = errMsg(e); msg.className = "msg error"; }
     }
-    // 记住扫描目录，下次打开自动带出
-    api("/api/config", { method: "PUT", body: JSON.stringify({ ipaPath: dir }) }).catch(() => {});
-  } catch (e) {
-    ipaFiles = [];
-    renderIpaList();
-    if (msg) { msg.textContent = errMsg(e); msg.className = "msg error"; }
-  }
+  });
 }
 
-async function installIpa(f: IpaFile): Promise<void> {
+async function installIpa(f: IpaFile, btn: HTMLElement): Promise<void> {
   const msg = document.getElementById("ipa-msg");
   if (msg) { msg.textContent = `卸载安装中：${f.name}…`; msg.className = "msg"; }
-  try {
-    await api("/api/apps/reinstall", { method: "POST", body: JSON.stringify({ ipaPath: f.path }) });
-    toast(`应用「${f.name}」已卸载并重新安装`, "ok");
-    if (msg) { msg.textContent = ""; msg.className = "msg"; }
-    refreshApps();
-  } catch (e) {
-    toast(errMsg(e), "error");
-    if (msg) { msg.textContent = errMsg(e); msg.className = "msg error"; }
-  }
+  await runWithBusy(btn, async () => {
+    try {
+      await api("/api/apps/reinstall", { method: "POST", body: JSON.stringify({ ipaPath: f.path }) });
+      toast(`应用「${f.name}」已卸载并重新安装`, "ok");
+      if (msg) { msg.textContent = ""; msg.className = "msg"; }
+      refreshApps();
+    } catch (e) {
+      toast(errMsg(e), "error");
+      if (msg) { msg.textContent = errMsg(e); msg.className = "msg error"; }
+    }
+  });
 }
 
 // ---------------- 动作 ----------------
@@ -794,19 +823,21 @@ async function refreshDeviceTime(): Promise<void> {
   }
 }
 
-async function quickControl(path: string, fallback: string): Promise<void> {
-  try {
-    const data = await api<{ ok: boolean; message?: string }>(path, { method: "POST" });
-    toast(data.message || fallback, "ok");
-  } catch (e) {
-    toast(errMsg(e), "error");
-  }
+async function quickControl(btn: HTMLElement | null, path: string, fallback: string): Promise<void> {
+  await runWithBusy(btn, async () => {
+    try {
+      const data = await api<{ ok: boolean; message?: string }>(path, { method: "POST" });
+      toast(data.message || fallback, "ok");
+    } catch (e) {
+      toast(errMsg(e), "error");
+    }
+  });
 }
 
 function bindQuickControls(): void {
   const bind = (id: string, path: string, fallback: string): void => {
     const btn = document.getElementById(id);
-    if (btn) btn.addEventListener("click", () => { void quickControl(path, fallback); });
+    if (btn) btn.addEventListener("click", () => { void quickControl(btn, path, fallback); });
   };
   bind("qc-reboot", "/api/android/control/reboot", "已发送重启指令");
   bind("qc-screen", "/api/android/control/screen", "已发送电源键");
@@ -1055,10 +1086,17 @@ async function uninstallAndroidApp(): Promise<void> {
   if (!packageName || packageName === "__load_more__") { toast("请先选择要卸载的应用", "error"); return; }
   const a = androidApps.find((x) => x.packageName === packageName);
   const label = a?.name && a.name !== packageName ? `${a.name}（${packageName}）` : packageName;
+  const btn = document.getElementById("android-uninstall-btn");
   askConfirm(`确定卸载「${label}」？此操作不可撤销。`, "卸载", () => {
-    api("/api/android/uninstall", { method: "POST", body: JSON.stringify({ packageName }) })
-      .then(() => { toast(`应用「${a?.name || packageName}」已卸载`, "ok"); refreshAndroidApps(); })
-      .catch((e) => toast(errMsg(e), "error"));
+    void runWithBusy(btn, async () => {
+      try {
+        await api("/api/android/uninstall", { method: "POST", body: JSON.stringify({ packageName }) });
+        toast(`应用「${a?.name || packageName}」已卸载`, "ok");
+        await refreshAndroidApps();
+      } catch (e) {
+        toast(errMsg(e), "error");
+      }
+    });
   });
 }
 
@@ -1067,9 +1105,15 @@ async function forceStopAndroidApp(): Promise<void> {
   const packageName = sel?.value || "";
   if (!packageName) { toast("请先选择应用", "error"); return; }
   const a = androidApps.find((x) => x.packageName === packageName);
-  api("/api/android/force-stop", { method: "POST", body: JSON.stringify({ packageName }) })
-    .then(() => toast(`应用「${a?.name || packageName}」已关闭`, "ok"))
-    .catch((e) => toast(errMsg(e), "error"));
+  const btn = document.getElementById("android-force-stop-btn");
+  await runWithBusy(btn, async () => {
+    try {
+      await api("/api/android/force-stop", { method: "POST", body: JSON.stringify({ packageName }) });
+      toast(`应用「${a?.name || packageName}」已关闭`, "ok");
+    } catch (e) {
+      toast(errMsg(e), "error");
+    }
+  });
 }
 
 async function clearAndroidAppData(): Promise<void> {
@@ -1078,10 +1122,16 @@ async function clearAndroidAppData(): Promise<void> {
   if (!packageName) { toast("请先选择应用", "error"); return; }
   const a = androidApps.find((x) => x.packageName === packageName);
   const label = a?.name && a.name !== packageName ? `${a.name}（${packageName}）` : packageName;
+  const btn = document.getElementById("android-clear-data-btn");
   askConfirm(`确定清除「${label}」的全部数据与缓存？此操作不可撤销。`, "清除数据", () => {
-    api("/api/android/clear-data", { method: "POST", body: JSON.stringify({ packageName }) })
-      .then(() => toast(`已清除「${a?.name || packageName}」的数据`, "ok"))
-      .catch((e) => toast(errMsg(e), "error"));
+    void runWithBusy(btn, async () => {
+      try {
+        await api("/api/android/clear-data", { method: "POST", body: JSON.stringify({ packageName }) });
+        toast(`已清除「${a?.name || packageName}」的数据`, "ok");
+      } catch (e) {
+        toast(errMsg(e), "error");
+      }
+    });
   });
 }
 
@@ -1104,7 +1154,7 @@ function renderApkList(): void {
     const actions = el("div", "fi-actions");
     const install = el("button", "btn primary", "卸载安装") as HTMLButtonElement;
     install.type = "button";
-    install.addEventListener("click", () => installApk(f));
+    install.addEventListener("click", () => { void installApk(f, install); });
     actions.append(install);
     item.append(main, actions);
     box.appendChild(item);
@@ -1116,35 +1166,39 @@ async function scanApk(): Promise<void> {
   const msg = document.getElementById("android-apk-msg");
   if (!dir) { toast("请输入 APK 所在目录", "error"); return; }
   if (msg) { msg.textContent = "扫描中…"; msg.className = "msg"; }
-  try {
-    const data = await api<{ files: ApkFile[] }>(`/api/android/scan-apk?dir=${encodeURIComponent(dir)}`);
-    apkFiles = data.files || [];
-    renderApkList();
-    if (msg) {
-      msg.textContent = apkFiles.length ? `找到 ${apkFiles.length} 个 APK 文件` : `在「${dir}」下没有找到 .apk 文件`;
-      msg.className = apkFiles.length ? "msg ok" : "msg";
+  await runWithBusy(document.getElementById("android-scan-btn"), async () => {
+    try {
+      const data = await api<{ files: ApkFile[] }>(`/api/android/scan-apk?dir=${encodeURIComponent(dir)}`);
+      apkFiles = data.files || [];
+      renderApkList();
+      if (msg) {
+        msg.textContent = apkFiles.length ? `找到 ${apkFiles.length} 个 APK 文件` : `在「${dir}」下没有找到 .apk 文件`;
+        msg.className = apkFiles.length ? "msg ok" : "msg";
+      }
+      // 记住扫描目录，下次打开自动带出
+      api("/api/config", { method: "PUT", body: JSON.stringify({ apkPath: dir }) }).catch(() => {});
+    } catch (e) {
+      apkFiles = [];
+      renderApkList();
+      if (msg) { msg.textContent = errMsg(e); msg.className = "msg error"; }
     }
-    // 记住扫描目录，下次打开自动带出
-    api("/api/config", { method: "PUT", body: JSON.stringify({ apkPath: dir }) }).catch(() => {});
-  } catch (e) {
-    apkFiles = [];
-    renderApkList();
-    if (msg) { msg.textContent = errMsg(e); msg.className = "msg error"; }
-  }
+  });
 }
 
-async function installApk(f: ApkFile): Promise<void> {
+async function installApk(f: ApkFile, btn: HTMLElement): Promise<void> {
   const msg = document.getElementById("android-apk-msg");
   if (msg) { msg.textContent = `卸载安装中：${f.name}…`; msg.className = "msg"; }
-  try {
-    await api("/api/android/install", { method: "POST", body: JSON.stringify({ apkPath: f.path }) });
-    toast(`应用「${f.name}」已卸载并重新安装`, "ok");
-    if (msg) { msg.textContent = ""; msg.className = "msg"; }
-    refreshAndroidApps();
-  } catch (e) {
-    toast(errMsg(e), "error");
-    if (msg) { msg.textContent = errMsg(e); msg.className = "msg error"; }
-  }
+  await runWithBusy(btn, async () => {
+    try {
+      await api("/api/android/install", { method: "POST", body: JSON.stringify({ apkPath: f.path }) });
+      toast(`应用「${f.name}」已卸载并重新安装`, "ok");
+      if (msg) { msg.textContent = ""; msg.className = "msg"; }
+      refreshAndroidApps();
+    } catch (e) {
+      toast(errMsg(e), "error");
+      if (msg) { msg.textContent = errMsg(e); msg.className = "msg error"; }
+    }
+  });
 }
 
 async function openAndroidDir(): Promise<void> {

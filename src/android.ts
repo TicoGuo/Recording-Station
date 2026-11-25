@@ -589,17 +589,24 @@ export function createAndroidRouter(): Router {
       } catch {
         // 解析包名失败不阻断卸载安装
       }
-      // 卸载旧版本（设备上不存在则忽略），实现卸载安装
+      // 判定是否已在本机安装：已安装则先卸载再安装，未安装则直接安装
       if (packageName) {
+        let installed = false;
         try {
+          const { stdout } = await runAdb(["shell", "pm", "path", packageName], 15000);
+          installed = /package:/.test(stdout);
+        } catch {
+          installed = false;
+        }
+        if (installed) {
           await runAdb(["uninstall", packageName], 60000);
-          log("info", "android", `卸载旧版本 ${packageName}`);
-        } catch (err) {
-          log("warn", "android", `卸载 ${packageName} 失败（可能未安装），继续安装`, messageOf(err));
+          log("info", "android", `已卸载旧版本 ${packageName}`);
+        } else {
+          log("info", "android", `${packageName} 未安装，直接安装`);
         }
       }
       await runAdb(["install", "-r", apkPath], 300000);
-      log("info", "android", `卸载安装完成 ${apkPath}`, { packageName });
+      log("info", "android", `安装完成 ${apkPath}`, { packageName });
       res.json({ ok: true, packageName });
     } catch (err) {
       const error = mapError(err);
