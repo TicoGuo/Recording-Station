@@ -232,6 +232,21 @@ let cachedPackagePathsAt = 0;
 // 已解析的应用名缓存（packageName -> 中文应用名）
 const appNameCache = new Map<string, string>();
 
+// 有限并发地执行异步任务，避免同时发起过多 adb 调用拖慢 USB 传输
+async function mapConcurrent<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let cursor = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (true) {
+      const i = cursor++;
+      if (i >= items.length) break;
+      results[i] = await fn(items[i]);
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
+
 function parsePackagePaths(stdout: string): Array<{ packageName: string; apkPath: string }> {
   const result: Array<{ packageName: string; apkPath: string }> = [];
   for (const raw of stdout.split(/\r?\n/)) {
@@ -494,15 +509,14 @@ export function createAndroidRouter(): Router {
   router.get("/apps", async (_req, res) => {
     try {
       const packages = await listThirdPartyPackages();
-      const apps: AndroidApp[] = [];
-      for (const pkg of packages) {
+      const apps = await mapConcurrent(packages, 6, async (pkg) => {
         let name = appNameCache.get(pkg.packageName);
         if (name === undefined) {
           name = (await resolveAppName(pkg.apkPath)) || pkg.packageName;
           appNameCache.set(pkg.packageName, name);
         }
-        apps.push({ packageName: pkg.packageName, name });
-      }
+        return { packageName: pkg.packageName, name };
+      });
       log("info", "android", `列出 ${apps.length} 个第三方应用`);
       res.json({ apps, total: apps.length });
     } catch (err) {
