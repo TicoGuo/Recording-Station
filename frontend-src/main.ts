@@ -586,7 +586,7 @@ async function installIpa(f: IpaFile): Promise<void> {
   try {
     await api("/api/apps/reinstall", { method: "POST", body: JSON.stringify({ ipaPath: f.path }) });
     toast(`应用「${f.name}」已卸载并重新安装`, "ok");
-    if (msg) { msg.textContent = "卸载安装完成"; msg.className = "msg ok"; }
+    if (msg) { msg.textContent = ""; msg.className = "msg"; }
     refreshApps();
   } catch (e) {
     toast(errMsg(e), "error");
@@ -1097,7 +1097,7 @@ async function installApk(f: ApkFile): Promise<void> {
   try {
     await api("/api/android/install", { method: "POST", body: JSON.stringify({ apkPath: f.path }) });
     toast(`应用「${f.name}」已卸载并重新安装`, "ok");
-    if (msg) { msg.textContent = "卸载安装完成"; msg.className = "msg ok"; }
+    if (msg) { msg.textContent = ""; msg.className = "msg"; }
     refreshAndroidApps();
   } catch (e) {
     toast(errMsg(e), "error");
