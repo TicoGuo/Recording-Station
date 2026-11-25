@@ -3,7 +3,7 @@ public/app.js
 config.json
 recording/
 release/
-redist/
+redist/vc_redist.x64.exe
 cache/
 .screenshots/
 .trae-html-share-packages/
