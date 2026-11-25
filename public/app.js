@@ -736,8 +736,11 @@
     if (platform === "android") {
       refreshAndroidDevices();
       refreshAndroidApps();
+      startAndroidAppNameStream();
       refreshAndroidRecord();
       renderAndroidFiles();
+    } else {
+      stopAndroidAppNameStream();
     }
     return true;
   }
@@ -982,6 +985,45 @@
         msg.textContent = errMsg(e);
         msg.className = "msg error";
       }
+    }
+  }
+  var _appNameStream = null;
+  var _appNameRenderTimer = null;
+  function scheduleAndroidAppSelectRender() {
+    if (_appNameRenderTimer !== null) return;
+    _appNameRenderTimer = window.setTimeout(() => {
+      _appNameRenderTimer = null;
+      renderAndroidAppSelect();
+    }, 120);
+  }
+  function startAndroidAppNameStream() {
+    if (_appNameStream) return;
+    const es = new EventSource("/api/android/apps/stream");
+    es.onmessage = (ev) => {
+      try {
+        const data = JSON.parse(ev.data);
+        if (data.done) {
+          stopAndroidAppNameStream();
+          return;
+        }
+        if (data.packageName && data.name) {
+          const app = androidApps.find((a) => a.packageName === data.packageName);
+          if (app && app.name !== data.name) {
+            app.name = data.name;
+            scheduleAndroidAppSelectRender();
+          }
+        }
+      } catch {
+      }
+    };
+    es.onerror = () => {
+    };
+    _appNameStream = es;
+  }
+  function stopAndroidAppNameStream() {
+    if (_appNameStream) {
+      _appNameStream.close();
+      _appNameStream = null;
     }
   }
   async function uninstallAndroidApp() {

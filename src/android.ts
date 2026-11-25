@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
-import { Router } from "express";
+import { Router, type Response } from "express";
 import { getConfig } from "./config";
 import { log } from "./logger";
 import { localDateStamp } from "./naming";
@@ -232,19 +232,15 @@ let cachedPackagePathsAt = 0;
 // 已解析的应用名缓存（packageName -> 中文应用名）
 const appNameCache = new Map<string, string>();
 
-// 有限并发地执行异步任务，避免同时发起过多 adb 调用拖慢 USB 传输
-async function mapConcurrent<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
-  const results: R[] = new Array(items.length);
-  let cursor = 0;
-  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (true) {
-      const i = cursor++;
-      if (i >= items.length) break;
-      results[i] = await fn(items[i]);
-    }
-  });
-  await Promise.all(workers);
-  return results;
+// 应用名后台解析：先返回包名列表，解析完成后通过 SSE 逐个推送真实应用名。
+const appNameClients = new Set<Response>();
+let appNameResolving = false;
+
+function broadcastAppNames(data: unknown): void {
+  const payload = `data: ${JSON.stringify(data)}\n\n`;
+  for (const client of appNameClients) {
+    try { client.write(payload); } catch { appNameClients.delete(client); }
+  }
 }
 
 function parsePackagePaths(stdout: string): Array<{ packageName: string; apkPath: string }> {
@@ -441,6 +437,37 @@ async function resolveAppName(apkPath: string): Promise<string> {
   }
 }
 
+// 后台解析第三方应用名：逐个解析并推送，不阻塞列表首次返回。
+// 幂等：同时只有一个解析任务在跑，避免重复触发大量 adb 调用。
+async function resolveAppNamesInBackground(packages: Array<{ packageName: string; apkPath: string }>): Promise<void> {
+  if (appNameResolving) return;
+  appNameResolving = true;
+  try {
+    const pending = packages.filter((p) => !appNameCache.has(p.packageName));
+    const limit = 6;
+    let cursor = 0;
+    const workers = Array.from({ length: Math.min(limit, pending.length) }, async () => {
+      while (true) {
+        const i = cursor++;
+        if (i >= pending.length) break;
+        const pkg = pending[i];
+        try {
+          const name = (await resolveAppName(pkg.apkPath)) || pkg.packageName;
+          appNameCache.set(pkg.packageName, name);
+          broadcastAppNames({ packageName: pkg.packageName, name });
+        } catch {
+          appNameCache.set(pkg.packageName, pkg.packageName);
+          broadcastAppNames({ packageName: pkg.packageName, name: pkg.packageName });
+        }
+      }
+    });
+    await Promise.all(workers);
+  } finally {
+    appNameResolving = false;
+  }
+  broadcastAppNames({ done: true });
+}
+
 function listAndroidFiles(): RecordFile[] {
   const dir = androidOutputDir();
   const files: RecordFile[] = [];
@@ -504,20 +531,49 @@ export function createAndroidRouter(): Router {
   router.get("/apps", async (_req, res) => {
     try {
       const packages = await listThirdPartyPackages();
-      const apps = await mapConcurrent(packages, 8, async (pkg) => {
-        let name = appNameCache.get(pkg.packageName);
-        if (name === undefined) {
-          name = (await resolveAppName(pkg.apkPath)) || pkg.packageName;
-          appNameCache.set(pkg.packageName, name);
-        }
-        return { packageName: pkg.packageName, name };
-      });
+      // 立即返回：已解析的用真实应用名，未解析的先用包名占位，避免阻塞首次渲染
+      const apps = packages.map((pkg) => ({
+        packageName: pkg.packageName,
+        name: appNameCache.get(pkg.packageName) || pkg.packageName,
+      }));
       log("info", "android", `列出 ${apps.length} 个第三方应用`);
       res.json({ apps, total: apps.length });
+      // 后台解析应用名并通过 SSE 推送
+      void resolveAppNamesInBackground(packages);
     } catch (err) {
       const error = mapError(err);
       log("error", "android", "获取应用列表失败", error);
       sendError(res, 502, codeForError(error), error, { apps: [], total: 0 });
+    }
+  });
+
+  // SSE：后台解析完成后推送真实应用名，前端先显示包名、收到推送后增量更新
+  router.get("/apps/stream", async (_req, res) => {
+    res.set({
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache, no-transform",
+      "Connection": "keep-alive",
+      "X-Accel-Buffering": "no",
+    });
+    res.flushHeaders();
+    appNameClients.add(res);
+    res.on("close", () => appNameClients.delete(res));
+
+    try {
+      const packages = await listThirdPartyPackages();
+      // 先补发已解析的名称，避免客户端错过已完成的结果
+      for (const pkg of packages) {
+        const name = appNameCache.get(pkg.packageName);
+        if (name && name !== pkg.packageName) {
+          res.write(`data: ${JSON.stringify({ packageName: pkg.packageName, name })}\n\n`);
+        }
+      }
+      void resolveAppNamesInBackground(packages);
+    } catch (err) {
+      const error = messageOf(err);
+      log("error", "android", "获取应用列表失败", error);
+      res.write(`data: ${JSON.stringify({ error })}\n\n`);
+      res.end();
     }
   });
 

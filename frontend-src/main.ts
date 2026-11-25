@@ -765,8 +765,11 @@ function setPlatform(platform: "ios" | "android"): boolean {
   if (platform === "android") {
     refreshAndroidDevices();
     refreshAndroidApps();
+    startAndroidAppNameStream();
     refreshAndroidRecord();
     renderAndroidFiles();
+  } else {
+    stopAndroidAppNameStream();
   }
   return true;
 }
@@ -1004,6 +1007,45 @@ async function refreshAndroidApps(): Promise<void> {
     androidApps = [];
     renderAndroidAppSelect();
     if (msg) { msg.textContent = errMsg(e); msg.className = "msg error"; }
+  }
+}
+
+// Android 应用名后台推送：先显示包名，后端解析完真实应用名后通过 SSE 增量更新
+let _appNameStream: EventSource | null = null;
+let _appNameRenderTimer: number | null = null;
+
+function scheduleAndroidAppSelectRender(): void {
+  if (_appNameRenderTimer !== null) return;
+  _appNameRenderTimer = window.setTimeout(() => {
+    _appNameRenderTimer = null;
+    renderAndroidAppSelect();
+  }, 120);
+}
+
+function startAndroidAppNameStream(): void {
+  if (_appNameStream) return;
+  const es = new EventSource("/api/android/apps/stream");
+  es.onmessage = (ev) => {
+    try {
+      const data = JSON.parse(ev.data);
+      if (data.done) { stopAndroidAppNameStream(); return; }
+      if (data.packageName && data.name) {
+        const app = androidApps.find((a) => a.packageName === data.packageName);
+        if (app && app.name !== data.name) {
+          app.name = data.name;
+          scheduleAndroidAppSelectRender();
+        }
+      }
+    } catch { /* 忽略无法解析的事件 */ }
+  };
+  es.onerror = () => { /* EventSource 会自动重连 */ };
+  _appNameStream = es;
+}
+
+function stopAndroidAppNameStream(): void {
+  if (_appNameStream) {
+    _appNameStream.close();
+    _appNameStream = null;
   }
 }
 
