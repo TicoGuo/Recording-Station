@@ -557,6 +557,34 @@ export function createAndroidRouter(): Router {
     }
   });
 
+  router.post("/force-stop", async (req, res) => {
+    const packageName = String(req.body?.packageName ?? "").trim();
+    if (!packageName) return sendError(res, 400, "INVALID_REQUEST", "缺少包名", { ok: false });
+    try {
+      await runAdb(["shell", "am", "force-stop", packageName], 15000);
+      log("info", "android", `已关闭应用 ${packageName}`);
+      res.json({ ok: true });
+    } catch (err) {
+      const error = mapError(err);
+      log("error", "android", `关闭应用失败 ${packageName}`, error);
+      sendError(res, 502, codeForError(error), error, { ok: false });
+    }
+  });
+
+  router.post("/clear-data", async (req, res) => {
+    const packageName = String(req.body?.packageName ?? "").trim();
+    if (!packageName) return sendError(res, 400, "INVALID_REQUEST", "缺少包名", { ok: false });
+    try {
+      await runAdb(["shell", "pm", "clear", packageName], 15000);
+      log("info", "android", `已清除数据 ${packageName}`);
+      res.json({ ok: true });
+    } catch (err) {
+      const error = mapError(err);
+      log("error", "android", `清除数据失败 ${packageName}`, error);
+      sendError(res, 502, codeForError(error), error, { ok: false });
+    }
+  });
+
   router.get("/status", (_req, res) => {
     res.json(getAndroidRecordStatus());
   });

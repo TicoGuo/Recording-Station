@@ -398,7 +398,7 @@ input:-webkit-autofill:active {
 .record-btn:disabled .rec-icon { color: var(--text-muted); fill: var(--text-muted); }
 
 /* ---------- 行式表单（应用管理 / 安装 IPA） ---------- */
-.manage-row { display: flex; gap: 8px; align-items: center; }
+.manage-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .manage-row select, .manage-row input { flex: 1; min-width: 0; }
 .manage-row .btn { flex: none; }
 

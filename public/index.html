@@ -221,9 +221,11 @@
           </div>
           <div class="apps-tools">
             <section class="app-tool" aria-labelledby="android-uninstall-title">
-              <h3 class="app-sub-head" id="android-uninstall-title">卸载应用</h3>
+              <h3 class="app-sub-head" id="android-uninstall-title">应用管理</h3>
               <div class="manage-row">
-                <select id="android-app-select"><option value="">选择要卸载的应用…</option></select>
+                <select id="android-app-select"><option value="">选择应用…</option></select>
+                <button type="button" id="android-force-stop-btn" class="btn ghost" disabled>关闭</button>
+                <button type="button" id="android-clear-data-btn" class="btn danger" disabled>清除数据</button>
                 <button type="button" id="android-uninstall-btn" class="btn danger" disabled>卸载</button>
               </div>
               <p id="android-apps-msg" class="msg"></p>

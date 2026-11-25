@@ -977,7 +977,7 @@ function renderAndroidAppSelect(): void {
   const sel = document.getElementById("android-app-select") as HTMLSelectElement | null;
   if (!sel) return;
   const prev = sel.value;
-  sel.innerHTML = `<option value="">选择要卸载的应用…</option>`;
+  sel.innerHTML = `<option value="">选择应用…</option>`;
   for (const a of androidApps) {
     const opt = document.createElement("option");
     opt.value = a.packageName;
@@ -985,8 +985,11 @@ function renderAndroidAppSelect(): void {
     sel.appendChild(opt);
   }
   if (androidApps.some((a) => a.packageName === prev)) sel.value = prev;
-  const btn = document.getElementById("android-uninstall-btn") as HTMLButtonElement | null;
-  if (btn) btn.disabled = !sel.value;
+  const disabled = !sel.value;
+  for (const id of ["android-force-stop-btn", "android-clear-data-btn", "android-uninstall-btn"]) {
+    const btn = document.getElementById(id) as HTMLButtonElement | null;
+    if (btn) btn.disabled = disabled;
+  }
 }
 
 async function refreshAndroidApps(): Promise<void> {
@@ -1013,6 +1016,29 @@ async function uninstallAndroidApp(): Promise<void> {
   askConfirm(`确定卸载「${label}」？此操作不可撤销。`, "卸载", () => {
     api("/api/android/uninstall", { method: "POST", body: JSON.stringify({ packageName }) })
       .then(() => { toast(`应用「${a?.name || packageName}」已卸载`, "ok"); refreshAndroidApps(); })
+      .catch((e) => toast(errMsg(e), "error"));
+  });
+}
+
+async function forceStopAndroidApp(): Promise<void> {
+  const sel = document.getElementById("android-app-select") as HTMLSelectElement | null;
+  const packageName = sel?.value || "";
+  if (!packageName) { toast("请先选择应用", "error"); return; }
+  const a = androidApps.find((x) => x.packageName === packageName);
+  api("/api/android/force-stop", { method: "POST", body: JSON.stringify({ packageName }) })
+    .then(() => toast(`应用「${a?.name || packageName}」已关闭`, "ok"))
+    .catch((e) => toast(errMsg(e), "error"));
+}
+
+async function clearAndroidAppData(): Promise<void> {
+  const sel = document.getElementById("android-app-select") as HTMLSelectElement | null;
+  const packageName = sel?.value || "";
+  if (!packageName) { toast("请先选择应用", "error"); return; }
+  const a = androidApps.find((x) => x.packageName === packageName);
+  const label = a?.name && a.name !== packageName ? `${a.name}（${packageName}）` : packageName;
+  askConfirm(`确定清除「${label}」的全部数据与缓存？此操作不可撤销。`, "清除数据", () => {
+    api("/api/android/clear-data", { method: "POST", body: JSON.stringify({ packageName }) })
+      .then(() => toast(`已清除「${a?.name || packageName}」的数据`, "ok"))
       .catch((e) => toast(errMsg(e), "error"));
   });
 }
@@ -1123,9 +1149,14 @@ function bindEvents(): void {
   on("android-refresh-apps-btn", "click", refreshAndroidApps);
   on("android-app-select", "change", () => {
     const sel = document.getElementById("android-app-select") as HTMLSelectElement | null;
-    const btn = document.getElementById("android-uninstall-btn") as HTMLButtonElement | null;
-    if (btn) btn.disabled = !(sel?.value);
+    const disabled = !(sel?.value);
+    for (const id of ["android-force-stop-btn", "android-clear-data-btn", "android-uninstall-btn"]) {
+      const btn = document.getElementById(id) as HTMLButtonElement | null;
+      if (btn) btn.disabled = disabled;
+    }
   });
+  on("android-force-stop-btn", "click", forceStopAndroidApp);
+  on("android-clear-data-btn", "click", clearAndroidAppData);
   on("android-uninstall-btn", "click", uninstallAndroidApp);
   on("android-scan-btn", "click", scanApk);
 
