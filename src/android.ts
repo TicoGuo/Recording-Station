@@ -737,6 +737,25 @@ export function createAndroidRouter(): Router {
     }
   });
 
+  // 读取快捷控制相关状态：WiFi、显示触摸点、屏幕是否点亮
+  router.get("/control/status", async (_req, res) => {
+    try {
+      const [wifiOut, touchesOut, powerOut] = await Promise.all([
+        runAdb(["shell", "settings", "get", "global", "wifi_on"], 15000),
+        runAdb(["shell", "settings", "get", "system", "show_touches"], 15000),
+        runAdb(["shell", "dumpsys", "power"], 15000),
+      ]);
+      const wifi = String(wifiOut.stdout).trim() === "1";
+      const touches = String(touchesOut.stdout).trim() === "1";
+      const screenOn = /mWakefulness=(Awake|Dozing)/i.test(powerOut.stdout);
+      res.json({ ok: true, wifi, touches, screenOn });
+    } catch (err) {
+      const error = mapError(err);
+      log("error", "android", "获取快捷控制状态失败", error);
+      sendError(res, 502, codeForError(error), error, { ok: false, wifi: false, touches: false, screenOn: false });
+    }
+  });
+
   router.post("/record/start", async (req, res) => {
     const serial = String(req.body?.serial ?? "").trim();
     if (!serial) return sendError(res, 400, "INVALID_REQUEST", "缺少设备序列号", { ...getAndroidRecordStatus() });

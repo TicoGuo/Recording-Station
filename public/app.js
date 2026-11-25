@@ -772,12 +772,16 @@
     }
     return true;
   }
+  var _androidControlStatus = { wifi: false, touches: false, screenOn: false };
   function renderQuickControls() {
     const box = document.getElementById("quick-controls");
     if (!box) return;
     const show = currentPlatform === "android";
     box.classList.toggle("hidden", !show);
-    if (show) refreshDeviceTime();
+    if (show) {
+      refreshDeviceTime();
+      refreshControlStatus();
+    }
   }
   async function refreshDeviceTime() {
     const el2 = document.getElementById("qc-time");
@@ -789,11 +793,29 @@
       el2.textContent = "--";
     }
   }
+  async function refreshControlStatus() {
+    try {
+      const data = await api("/api/android/control/status");
+      _androidControlStatus = { wifi: data.wifi, touches: data.touches, screenOn: data.screenOn };
+    } catch {
+    }
+    renderControlStatus();
+  }
+  function renderControlStatus() {
+    const setOn = (id, on2) => {
+      const btn = document.getElementById(id);
+      if (btn) btn.classList.toggle("on", on2);
+    };
+    setOn("qc-wifi", _androidControlStatus.wifi);
+    setOn("qc-touches", _androidControlStatus.touches);
+    setOn("qc-screen", _androidControlStatus.screenOn);
+  }
   async function quickControl(btn, path, fallback) {
     await runWithBusy(btn, async () => {
       try {
         const data = await api(path, { method: "POST" });
         toast(data.message || fallback, "ok");
+        window.setTimeout(refreshControlStatus, 600);
       } catch (e) {
         toast(errMsg(e), "error");
       }

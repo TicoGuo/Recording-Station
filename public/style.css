@@ -106,9 +106,14 @@ body {
 }
 .qc-btn:hover { color: var(--text); background: var(--surface-3); border-color: var(--border); }
 .qc-btn:active { transform: scale(.94); }
-.qc-btn svg { width: 16px; height: 16px; }
+.qc-btn svg { width: 18px; height: 18px; }
+.qc-btn .icon-on { display: none; }
+.qc-btn .icon-off { display: block; }
+.qc-btn.on { color: var(--text); }
+.qc-btn.on .icon-on { display: block; }
+.qc-btn.on .icon-off { display: none; }
 .qc-btn.is-busy { pointer-events: none; }
-.qc-btn.is-busy svg { display: none; }
+.qc-btn.is-busy svg { display: none !important; }
 .qc-btn.is-busy::after {
   content: ""; width: 12px; height: 12px; border-radius: 50%;
   border: 2px solid currentColor; border-top-color: transparent;

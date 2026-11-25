@@ -804,12 +804,17 @@ function setPlatform(platform: "ios" | "android"): boolean {
 }
 
 // ---------------- 渲染：Android 快捷控制 ----------------
+let _androidControlStatus = { wifi: false, touches: false, screenOn: false };
+
 function renderQuickControls(): void {
   const box = document.getElementById("quick-controls");
   if (!box) return;
   const show = currentPlatform === "android";
   box.classList.toggle("hidden", !show);
-  if (show) refreshDeviceTime();
+  if (show) {
+    refreshDeviceTime();
+    refreshControlStatus();
+  }
 }
 
 async function refreshDeviceTime(): Promise<void> {
@@ -823,11 +828,33 @@ async function refreshDeviceTime(): Promise<void> {
   }
 }
 
+async function refreshControlStatus(): Promise<void> {
+  try {
+    const data = await api<{ ok: boolean; wifi: boolean; touches: boolean; screenOn: boolean }>("/api/android/control/status");
+    _androidControlStatus = { wifi: data.wifi, touches: data.touches, screenOn: data.screenOn };
+  } catch {
+    // 读取失败保持上次状态
+  }
+  renderControlStatus();
+}
+
+function renderControlStatus(): void {
+  const setOn = (id: string, on: boolean): void => {
+    const btn = document.getElementById(id);
+    if (btn) btn.classList.toggle("on", on);
+  };
+  setOn("qc-wifi", _androidControlStatus.wifi);
+  setOn("qc-touches", _androidControlStatus.touches);
+  setOn("qc-screen", _androidControlStatus.screenOn);
+}
+
 async function quickControl(btn: HTMLElement | null, path: string, fallback: string): Promise<void> {
   await runWithBusy(btn, async () => {
     try {
       const data = await api<{ ok: boolean; message?: string }>(path, { method: "POST" });
       toast(data.message || fallback, "ok");
+      // 切换后稍候重新读取状态，等待设备生效
+      window.setTimeout(refreshControlStatus, 600);
     } catch (e) {
       toast(errMsg(e), "error");
     }
