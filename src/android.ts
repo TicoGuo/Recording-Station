@@ -561,6 +561,82 @@ export function createAndroidRouter(): Router {
     res.json(getAndroidRecordStatus());
   });
 
+  // ---------------- 快捷控制 ----------------
+  // 重启设备：adb reboot 会让设备立即离线，命令可能返回非零/超时，这是预期行为，不要记成错误
+  router.post("/control/reboot", async (_req, res) => {
+    try {
+      await execFileAsync(adbBin(), ["reboot"], {
+        encoding: "utf8", timeout: 15000, windowsHide: true,
+      }).catch(() => undefined);
+      log("info", "android", "已发送重启指令");
+      res.json({ ok: true, message: "已发送重启指令" });
+    } catch {
+      log("info", "android", "已发送重启指令（设备开始重启）");
+      res.json({ ok: true, message: "已发送重启指令" });
+    }
+  });
+
+  // 锁屏/唤醒：电源键 toggle（亮屏锁屏、息屏唤醒）
+  router.post("/control/screen", async (_req, res) => {
+    try {
+      await runAdb(["shell", "input", "keyevent", "26"], 15000);
+      log("info", "android", "已发送电源键");
+      res.json({ ok: true, message: "已发送电源键" });
+    } catch (err) {
+      const error = mapError(err);
+      log("error", "android", "锁屏/唤醒失败", error);
+      sendError(res, 502, codeForError(error), error, { ok: false });
+    }
+  });
+
+  // 切换开发者模式
+  router.post("/control/devmode", async (_req, res) => {
+    try {
+      const { stdout } = await runAdb(["shell", "settings", "get", "global", "development_settings_enabled"], 15000);
+      const enabled = String(stdout).trim() === "1";
+      const next = enabled ? "0" : "1";
+      await runAdb(["shell", "settings", "put", "global", "development_settings_enabled", next], 15000);
+      const label = next === "1" ? "开启" : "关闭";
+      log("info", "android", `开发者模式已${label}`);
+      res.json({ ok: true, enabled: next === "1", message: `开发者模式已${label}` });
+    } catch (err) {
+      const error = mapError(err);
+      log("error", "android", "切换开发者模式失败", error);
+      sendError(res, 502, codeForError(error), error, { ok: false });
+    }
+  });
+
+  // 切换 WiFi
+  router.post("/control/wifi", async (_req, res) => {
+    try {
+      const { stdout } = await runAdb(["shell", "settings", "get", "global", "wifi_on"], 15000);
+      const enabled = String(stdout).trim() === "1";
+      const next = enabled ? "0" : "1";
+      await runAdb(["shell", "svc", "wifi", next === "1" ? "enable" : "disable"], 15000);
+      const label = next === "1" ? "开启" : "关闭";
+      log("info", "android", `WiFi 已${label}`);
+      res.json({ ok: true, enabled: next === "1", message: `WiFi 已${label}` });
+    } catch (err) {
+      const error = mapError(err);
+      log("error", "android", "切换 WiFi 失败", error);
+      sendError(res, 502, codeForError(error), error, { ok: false });
+    }
+  });
+
+  // 获取手机时间（年月日）
+  router.get("/control/time", async (_req, res) => {
+    try {
+      const { stdout } = await runAdb(["shell", "date", "+%Y-%m-%d"], 15000);
+      const date = String(stdout).trim();
+      log("info", "android", `手机日期 ${date}`);
+      res.json({ ok: true, date });
+    } catch (err) {
+      const error = mapError(err);
+      log("error", "android", "获取时间失败", error);
+      sendError(res, 502, codeForError(error), error, { ok: false, date: "" });
+    }
+  });
+
   router.post("/record/start", async (req, res) => {
     const serial = String(req.body?.serial ?? "").trim();
     if (!serial) return sendError(res, 400, "INVALID_REQUEST", "缺少设备序列号", { ...getAndroidRecordStatus() });

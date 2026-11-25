@@ -761,6 +761,7 @@ function setPlatform(platform: "ios" | "android"): boolean {
     t.classList.toggle("active", (t as HTMLElement).dataset.platform === platform);
   });
   renderTopbar();
+  renderQuickControls();
   if (platform === "android") {
     refreshAndroidDevices();
     refreshAndroidApps();
@@ -768,6 +769,46 @@ function setPlatform(platform: "ios" | "android"): boolean {
     renderAndroidFiles();
   }
   return true;
+}
+
+// ---------------- 渲染：Android 快捷控制 ----------------
+function renderQuickControls(): void {
+  const box = document.getElementById("quick-controls");
+  if (!box) return;
+  const show = currentPlatform === "android";
+  box.classList.toggle("hidden", !show);
+  if (show) refreshDeviceTime();
+}
+
+async function refreshDeviceTime(): Promise<void> {
+  const el = document.getElementById("qc-time");
+  if (!el) return;
+  try {
+    const data = await api<{ ok: boolean; date: string }>("/api/android/control/time");
+    el.textContent = data.date || "--";
+  } catch {
+    el.textContent = "--";
+  }
+}
+
+async function quickControl(path: string, fallback: string): Promise<void> {
+  try {
+    const data = await api<{ ok: boolean; message?: string }>(path, { method: "POST" });
+    toast(data.message || fallback, "ok");
+  } catch (e) {
+    toast(errMsg(e), "error");
+  }
+}
+
+function bindQuickControls(): void {
+  const bind = (id: string, path: string, fallback: string): void => {
+    const btn = document.getElementById(id);
+    if (btn) btn.addEventListener("click", () => { void quickControl(path, fallback); });
+  };
+  bind("qc-reboot", "/api/android/control/reboot", "已发送重启指令");
+  bind("qc-screen", "/api/android/control/screen", "已发送电源键");
+  bind("qc-devmode", "/api/android/control/devmode", "开发者模式已切换");
+  bind("qc-wifi", "/api/android/control/wifi", "WiFi 已切换");
 }
 
 // ---------------- 渲染：Android 设备（顶栏设备名 + 录制按钮可用性） ----------------
@@ -1107,6 +1148,7 @@ function bindEvents(): void {
 // ---------------- 启动 ----------------
 function init(): void {
   bindEvents();
+  bindQuickControls();
 
   // 强制阻止浏览器自动填充覆盖 input 值（某些浏览器无视 autocomplete="off"）
   const op = document.getElementById("output-path") as HTMLInputElement | null;
@@ -1151,6 +1193,7 @@ function init(): void {
   refreshRecord();
   refreshApps();
   renderFiles();
+  renderQuickControls();
   initTimer();
   initAndroidTimer();
   window.setInterval(refreshDevices, 3000);
@@ -1161,6 +1204,7 @@ function init(): void {
   window.setInterval(() => { if (currentPlatform === "android") refreshAndroidDevices(); }, 3000);
   window.setInterval(() => { if (currentPlatform === "android") refreshAndroidRecord(); }, 1000);
   window.setInterval(() => { if (currentPlatform === "android") renderAndroidFiles(); }, 4000);
+  window.setInterval(() => { if (currentPlatform === "android") refreshDeviceTime(); }, 60000);
 }
 
 // 推迟到 load 之后再启动：避免嵌入式 WebView 首屏主框架尚未提交完成时，
